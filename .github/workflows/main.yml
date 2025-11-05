@@ -113,7 +113,7 @@ jobs:
           
           if (-not (Test-Path $exePath)) { Write-Host "[ERR] Executable not found at: $exePath"; exit 1 }
           
-          Write-Host "[*] Running masoud.exe for 5 hours with random restarts..."
+          Write-Host "[*] Running masoud.exe for 5 hours..."
           Write-Host "[*] Path: $exePath"
           Write-Host "[*] Start time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
           
@@ -126,59 +126,9 @@ jobs:
             $checkInterval = 60
             $numCores = (Get-WmiObject Win32_ComputerSystem).NumberOfLogicalProcessors
             
-            # زمان تصادفی برای اولین restart (45 دقیقه تا 1.5 ساعت)
-            $minMinutes = 45
-            $maxMinutes = 90
-            $nextRestartMinutes = Get-Random -Minimum $minMinutes -Maximum $maxMinutes
-            $nextRestartTime = (Get-Date).AddMinutes($nextRestartMinutes)
-            Write-Host "[*] Next scheduled restart in $nextRestartMinutes minutes at: $(Get-Date -Date $nextRestartTime -Format 'HH:mm:ss')"
-            
-            $restartCount = 0
-            
             while ((Get-Date) -lt $endTime) {
-                $now = Get-Date
-                
-                # بررسی اینکه آیا زمان restart رسیده
-                if ($now -ge $nextRestartTime) {
-                    Write-Host ""
-                    Write-Host "======================================"
-                    Write-Host "  SCHEDULED RESTART #$($restartCount + 1)"
-                    Write-Host "======================================"
-                    
-                    if (-not $process.HasExited) {
-                        Write-Host "[*] Stopping process PID: $($process.Id)..."
-                        Stop-Process -Id $process.Id -Force
-                        Write-Host "[OK] Process stopped"
-                    }
-                    
-                    Write-Host "[*] Waiting 60 seconds before restart..."
-                    Start-Sleep -Seconds 60
-                    
-                    Write-Host "[*] Restarting process..."
-                    $process = Start-Process -FilePath $exePath -NoNewWindow -PassThru `
-                      -RedirectStandardOutput C:\app\masoud_output.log -RedirectStandardError C:\app\masoud_error.log -Append
-                    Write-Host "[OK] Process restarted with PID: $($process.Id)"
-                    
-                    $restartCount++
-                    
-                    # محاسبه زمان restart بعدی (45 تا 90 دقیقه از الان)
-                    $nextRestartMinutes = Get-Random -Minimum $minMinutes -Maximum $maxMinutes
-                    $nextRestartTime = (Get-Date).AddMinutes($nextRestartMinutes)
-                    
-                    # اطمینان از اینکه زمان بعدی از endTime تجاوز نکند
-                    if ($nextRestartTime -gt $endTime) {
-                        Write-Host "[*] No more restarts scheduled (would exceed 5-hour limit)"
-                        $nextRestartTime = $endTime.AddYears(1)  # تنظیم به آینده دور
-                    } else {
-                        Write-Host "[*] Next restart in $nextRestartMinutes minutes at: $(Get-Date -Date $nextRestartTime -Format 'HH:mm:ss')"
-                    }
-                    Write-Host "======================================"
-                    Write-Host ""
-                }
-                
-                # بررسی اگر پروسه به صورت غیرمنتظره exit شده
                 if ($process.HasExited) {
-                    Write-Host "[!] Process exited unexpectedly with code: $($process.ExitCode)"
+                    Write-Host "[!] Process exited early with code: $($process.ExitCode)"
                     Write-Host "[*] Restarting process..."
                     $process = Start-Process -FilePath $exePath -NoNewWindow -PassThru `
                       -RedirectStandardOutput C:\app\masoud_output.log -RedirectStandardError C:\app\masoud_error.log -Append
@@ -203,9 +153,7 @@ jobs:
 
                 $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
                 $remainingMin = [math]::Round($remaining, 0)
-                $nextRestartIn = [math]::Round(($nextRestartTime - (Get-Date)).TotalMinutes, 0)
-                if ($nextRestartIn -lt 0) { $nextRestartIn = "N/A" }
-                Write-Host "[$timestamp] Running | PID: $($process.Id) | CPU: ${cpuPercent}% | MEM: ${memMB} MB | Remaining: ${remainingMin}m | Next restart: ${nextRestartIn}m"
+                Write-Host "[$timestamp] Running | PID: $($process.Id) | CPU: ${cpuPercent}% | MEM: ${memMB} MB | Remaining: ${remainingMin}m"
 
                 Start-Sleep -Seconds $checkInterval
             }
@@ -214,7 +162,6 @@ jobs:
             Write-Host "======================================"
             Write-Host "  5-HOUR LIMIT REACHED - STOPPING"
             Write-Host "======================================"
-            Write-Host "[*] Total scheduled restarts performed: $restartCount"
             
             if (-not $process.HasExited) {
                 Write-Host "[*] Terminating process PID: $($process.Id)..."
